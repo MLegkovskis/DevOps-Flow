@@ -170,62 +170,46 @@ jobs:
   # ------------------------------------------------------
   #  5) Deploy to ephemeral environment via Docker + ngrok
   # ------------------------------------------------------
-  deploy-ephemeral:
-    name: Deploy Ephemeral
-    runs-on: ubuntu-latest
-    needs: [docker-build-push]
+deploy-ephemeral:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Check out code
+      uses: actions/checkout@v3
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    # 1. Build & Run Docker Container (or any local server)
+    - name: Run Docker container
+      run: |
+        docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
+    
+    # 2. Install Node & localtunnel
+    - name: Install localtunnel
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nodejs npm
+        sudo npm install -g localtunnel
 
-      - name: Log in to Docker Hub (using PAT)
-        run: |
-          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u "marilee" --password-stdin
+    # 3. Start localtunnel in background
+    - name: Start localtunnel
+      run: |
+        nohup lt --port 8080 > localtunnel.log 2>&1 &
+        # wait a bit for localtunnel to spin up
+        sleep 5
 
-      - name: Pull Docker image
-        run: |
-          docker pull "marilee/devops:${{ github.sha }}"
+    # 4. Parse the localtunnel log to find the assigned public URL
+    - name: Extract localtunnel URL
+      id: lturl
+      run: |
+        echo "==== localtunnel.log ===="
+        cat localtunnel.log
+        # localtunnel.log usually prints something like:
+        # your url is: https://abc.loca.lt
+        # We'll grep for that line:
+        export TUNNEL_URL=$(grep 'url is:' localtunnel.log | sed 's/.*url is: //')
+        echo "TUNNEL_URL=$TUNNEL_URL" >> $GITHUB_ENV
+        echo "::set-output name=url::$TUNNEL_URL"
 
-      - name: Run Docker container
-        run: |
-          docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
-
-      - name: Install ngrok
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
-          curl -s https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o ngrok.zip
-          unzip ngrok.zip
-          sudo mv ngrok /usr/local/bin/ngrok
-
-      - name: Auth ngrok (for v2)
-        run: |
-          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-
-      - name: Start ngrok
-        run: |
-          nohup ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
-          sleep 15
-          echo "ngrok started"
-
-      - name: Debug ngrok
-        run: |
-          echo "==== ngrok.log ===="
-          cat ngrok.log
-
-      - name: Get ngrok public URL
-        run: |
-          curl --silent http://127.0.0.1:4040/api/tunnels > tunnels.json
-          cat tunnels.json
-          export NGROK_URL=$(cat tunnels.json | jq -r '.tunnels[0].public_url')
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
-
-      - name: Show ephemeral URL
-        run: |
-          echo "Your ephemeral app is now live at: $NGROK_URL"
-
-      - name: Post ephemeral URL as job summary
-        run: |
-          echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "Your app is live at: [$NGROK_URL]($NGROK_URL)" >> $GITHUB_STEP_SUMMARY
+    # 5. Show ephemeral URL in job summary
+    - name: Post ephemeral URL as job summary
+      run: |
+        echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "Your app is live at: [${TUNNEL_URL}](${TUNNEL_URL})" >> $GITHUB_STEP_SUMMARY
