@@ -170,50 +170,52 @@ jobs:
   # ------------------------------------------------------
   #  5) Deploy to ephemeral environment via Docker + ngrok
   # ------------------------------------------------------
-  deploy-ephemeral:
+  deploy-gcp-ephemeral:
+    name: Deploy GCP Ephemeral VM
     runs-on: ubuntu-latest
     needs: [docker-build-push]
+
     steps:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Install localtunnel
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nodejs npm
-          sudo npm install -g localtunnel
+      # 1) Authenticate to GCP using service account
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Run your webapp container
-        run: |
-          docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
-          # Wait for Tomcat to start
-          sleep 15
+      # 2) Set up Terraform
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: Start localtunnel
-        run: |
-          nohup lt --port 8080 > localtunnel.log 2>&1 &
-          sleep 5
+      # 3) Terraform Init
+      - name: Terraform Init
+        run: terraform init
 
-      - name: Show localtunnel logs
-        run: cat localtunnel.log
+      # 4) Terraform Plan
+      - name: Terraform Plan
+        run: terraform plan
 
-      - name: Get localtunnel URL
-        id: lt
-        run: |
-          # localtunnel.log usually has a line "your url is: https://abc.loca.lt"
-          export TUNNEL_URL=$(grep 'url is:' localtunnel.log | sed 's/.*url is: //')
-          echo "TUNNEL_URL=$TUNNEL_URL" >> $GITHUB_ENV
-          echo "::set-output name=url::$TUNNEL_URL"
+      # 5) Terraform Apply
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
 
-      - name: Get localtunnel password
+      # 6) Grab the public IP from Terraform output
+      - name: Get Public IP
+        id: get-ip
         run: |
-          LT_PASS=$(curl -s https://loca.lt/mytunnelpassword)
-          echo "Localtunnel password: $LT_PASS"
-          # Typically you can just echo it. 
-          # The user can copy/paste to the localtunnel prompt if they see one.
+          IP=$(terraform output -raw public_ip)
+          echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
+        shell: bash
 
-      - name: Post ephemeral URL as job summary
+      # 7) Sleep for 60s so user can test the app
+      - name: Sleep to Allow Testing
         run: |
-          echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "**URL**: [$TUNNEL_URL]($TUNNEL_URL)" >> $GITHUB_STEP_SUMMARY
-          echo "**Tunnel Password**: (see logs above)" >> $GITHUB_STEP_SUMMARY
+          echo "Public IP is $PUBLIC_IP. You can browse http://$PUBLIC_IP:8080"
+          echo "Sleeping 60 seconds. Explore the app now!"
+          sleep 60
+
+      # 8) Terraform Destroy
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
