@@ -170,46 +170,46 @@ jobs:
   # ------------------------------------------------------
   #  5) Deploy to ephemeral environment via Docker + ngrok
   # ------------------------------------------------------
-deploy-ephemeral:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Check out code
-      uses: actions/checkout@v3
+  deploy-ephemeral:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
 
-    # 1. Build & Run Docker Container (or any local server)
-    - name: Run Docker container
-      run: |
-        docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
-    
-    # 2. Install Node & localtunnel
-    - name: Install localtunnel
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nodejs npm
-        sudo npm install -g localtunnel
+      # 1. Build & Run Docker Container (or any local server)
+      - name: Run Docker container
+        run: |
+          docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
+      
+      # 2. Install Node & localtunnel
+      - name: Install localtunnel
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nodejs npm
+          sudo npm install -g localtunnel
 
-    # 3. Start localtunnel in background
-    - name: Start localtunnel
-      run: |
-        nohup lt --port 8080 > localtunnel.log 2>&1 &
-        # wait a bit for localtunnel to spin up
-        sleep 5
+      # 3. Start localtunnel in background
+      - name: Start localtunnel
+        run: |
+          nohup lt --port 8080 > localtunnel.log 2>&1 &
+          # wait a bit for localtunnel to spin up
+          sleep 5
 
-    # 4. Parse the localtunnel log to find the assigned public URL
-    - name: Extract localtunnel URL
-      id: lturl
-      run: |
-        echo "==== localtunnel.log ===="
-        cat localtunnel.log
-        # localtunnel.log usually prints something like:
-        # your url is: https://abc.loca.lt
-        # We'll grep for that line:
-        export TUNNEL_URL=$(grep 'url is:' localtunnel.log | sed 's/.*url is: //')
-        echo "TUNNEL_URL=$TUNNEL_URL" >> $GITHUB_ENV
-        echo "::set-output name=url::$TUNNEL_URL"
+      # 4. Parse the localtunnel log to find the assigned public URL
+      - name: Extract localtunnel URL
+        id: lturl
+        run: |
+          echo "==== localtunnel.log ===="
+          cat localtunnel.log
+          # localtunnel.log usually prints something like:
+          # your url is: https://abc.loca.lt
+          # We'll grep for that line:
+          export TUNNEL_URL=$(grep 'url is:' localtunnel.log | sed 's/.*url is: //')
+          echo "TUNNEL_URL=$TUNNEL_URL" >> $GITHUB_ENV
+          echo "::set-output name=url::$TUNNEL_URL"
 
-    # 5. Show ephemeral URL in job summary
-    - name: Post ephemeral URL as job summary
-      run: |
-        echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
-        echo "Your app is live at: [${TUNNEL_URL}](${TUNNEL_URL})" >> $GITHUB_STEP_SUMMARY
+      # 5. Show ephemeral URL in job summary
+      - name: Post ephemeral URL as job summary
+        run: |
+          echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "Your app is live at: [${TUNNEL_URL}](${TUNNEL_URL})" >> $GITHUB_STEP_SUMMARY
