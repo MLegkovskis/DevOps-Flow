@@ -154,13 +154,9 @@ jobs:
           name: war-artifact
           path: ./target
 
-      - name: Debug Secret (Length Only)
-        run: |
-          echo "Length of DOCKERHUB_PAT is: ${#DOCKERHUB_PAT}"
-
       - name: Log in to Docker Hub (using PAT)
         run: |
-          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u marilee --password-stdin
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u "marilee" --password-stdin
 
       - name: Build Docker image
         run: |
@@ -185,7 +181,7 @@ jobs:
 
       - name: Log in to Docker Hub (using PAT)
         run: |
-          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u marilee --password-stdin
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u "marilee" --password-stdin
 
       - name: Pull Docker image
         run: |
