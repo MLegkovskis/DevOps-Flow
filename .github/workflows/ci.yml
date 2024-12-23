@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ------------------------------------------------------
+  #  1) Build & Test
+  # ------------------------------------------------------
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Maven Test
+        run: mvn --batch-mode clean test
+
+  # ------------------------------------------------------
+  #  2) Build the WAR file
+  # ------------------------------------------------------
+  build-war:
+    name: Build WAR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+
+      - name: Maven Package
+        run: mvn --batch-mode clean package
+
+      - name: Archive WAR artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: war-artifact
+          path: target/hello-1.0.war
+
+  # ------------------------------------------------------
+  #  3a) Security Scan: OWASP Dependency Check
+  # ------------------------------------------------------
+  owasp-dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Restore WAR artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: war-artifact
+          path: ./target
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+
+      - name: Install OWASP Dependency Check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.3.1/dependency-check-8.3.1-release.zip
+          unzip dependency-check-8.3.1-release.zip -d /usr/local/
+          sudo ln -s /usr/local/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+
+      - name: Run OWASP Dependency Check
+        run: |
+          dependency-check --scan . \
+            --format HTML \
+            --out ./dependency-check-report.html \
+            --failOnCVSS 7
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: dependency-check-report.html
+
+  # ------------------------------------------------------
+  #  3b) Code-Style Scan: Checkstyle
+  # ------------------------------------------------------
+  checkstyle:
+    name: Checkstyle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Restore WAR artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: war-artifact
+          path: ./target
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+
+      - name: Checkstyle Scan
+        run: |
+          mvn --batch-mode org.apache.maven.plugins:maven-checkstyle-plugin:3.2.3:check
+
+  # ------------------------------------------------------
+  #  4) Docker Build & Push (using PAT)
+  # ------------------------------------------------------
+  docker-build-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Restore WAR artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: war-artifact
+          path: ./target
+
+      - name: Log in to Docker Hub (using PAT)
+        run: |
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u "marilee" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t "marilee/devops:${{ github.sha }}" .
+
+      - name: Push Docker image
+        run: |
+          docker push "marilee/devops:${{ github.sha }}"
+
+  # ------------------------------------------------------
+  #  5) Deploy to ephemeral environment via Docker + ngrok
+  # ------------------------------------------------------
+  deploy-ephemeral:
+    name: Deploy Ephemeral
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub (using PAT)
+        run: |
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u "marilee" --password-stdin
+
+      - name: Pull Docker image
+        run: |
+          docker pull "marilee/devops:${{ github.sha }}"
+
+      - name: Run Docker container
+        run: |
+          docker run -d --rm -p 8080:8080 --name ephemeral-webapp "marilee/devops:${{ github.sha }}"
+
+      - name: Install ngrok
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          curl -s https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o ngrok.zip
+          unzip ngrok.zip
+          sudo mv ngrok /usr/local/bin/ngrok
+
+      - name: Auth ngrok
+        run: |
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Start ngrok to expose port 8080
+        run: |
+          nohup ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
+          sleep 5
+          echo "ngrok started"
+
+      - name: Get ngrok public URL
+        id: ngrok
+        run: |
+          curl --silent http://127.0.0.1:4040/api/tunnels > tunnels.json
+          cat tunnels.json
+          export NGROK_URL=$(cat tunnels.json | jq -r '.tunnels[0].public_url')
+          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+
+      - name: Show ephemeral URL
+        run: |
+          echo "Your ephemeral app is now live at: $NGROK_URL"
+
+      - name: Post ephemeral URL as job summary
+        run: |
+          echo "## Ephemeral Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "Your app is live at: [$NGROK_URL]($NGROK_URL)" >> $GITHUB_STEP_SUMMARY
+
+    needs: [docker-build-push]
+
+  # ------------------------------------------------------
+  #  Dependencies / Job order
+  # ------------------------------------------------------
+  build-war:
+    needs: [build-test]
+
+  owasp-dependency-check:
+    needs: [build-war]
+
+  checkstyle:
+    needs: [build-war]
+
+  docker-build-push:
+    needs: [owasp-dependency-check, checkstyle]
+
+  deploy-ephemeral:
+    needs: [docker-build-push]
