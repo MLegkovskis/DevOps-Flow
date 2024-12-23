@@ -199,19 +199,22 @@ jobs:
           unzip ngrok.zip
           sudo mv ngrok /usr/local/bin/ngrok
 
-      - name: Auth ngrok
+      - name: Auth ngrok (for v2)
         run: |
           ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
-
-      - name: Start ngrok to expose port 8080
+      - name: Start ngrok
         run: |
           nohup ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
-          sleep 5
+          sleep 15
           echo "ngrok started"
 
+      - name: Debug ngrok
+        run: |
+          echo "==== ngrok.log ===="
+          cat ngrok.log
+
       - name: Get ngrok public URL
-        id: ngrok
         run: |
           curl --silent http://127.0.0.1:4040/api/tunnels > tunnels.json
           cat tunnels.json
