@@ -160,7 +160,7 @@ jobs:
 
       - name: Log in to Docker Hub (using PAT)
         run: |
-          docker login -u "marilee" -p "${{ secrets.DOCKERHUB_PAT }}"
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u marilee --password-stdin
 
       - name: Build Docker image
         run: |
@@ -185,7 +185,7 @@ jobs:
 
       - name: Log in to Docker Hub (using PAT)
         run: |
-          docker login -u "marilee" -p "${{ secrets.DOCKERHUB_PAT }}"
+          echo "${{ secrets.DOCKERHUB_PAT }}" | docker login -u marilee --password-stdin
 
       - name: Pull Docker image
         run: |
