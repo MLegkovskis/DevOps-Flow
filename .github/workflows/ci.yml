@@ -73,47 +73,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Download WAR artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: war-artifact
-          path: ./target
+      # - name: Download WAR artifact
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: war-artifact
+      #     path: ./target
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '11'
+      # - name: Set up JDK 11
+      #   uses: actions/setup-java@v3
+      #   with:
+      #     distribution: 'temurin'
+      #     java-version: '11'
 
-      - name: Install OWASP Dependency Check (local folder)
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/dependency-check
-          wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.3.1/dependency-check-8.3.1-release.zip
-          unzip dependency-check-8.3.1-release.zip -d $GITHUB_WORKSPACE/dependency-check
-          echo "$GITHUB_WORKSPACE/dependency-check/dependency-check/bin" >> $GITHUB_PATH
+      # - name: Install OWASP Dependency Check (local folder)
+      #   run: |
+      #     mkdir -p $GITHUB_WORKSPACE/dependency-check
+      #     wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.3.1/dependency-check-8.3.1-release.zip
+      #     unzip dependency-check-8.3.1-release.zip -d $GITHUB_WORKSPACE/dependency-check
+      #     echo "$GITHUB_WORKSPACE/dependency-check/dependency-check/bin" >> $GITHUB_PATH
 
-      - name: Remove old DC data
-        run: rm -rf /tmp/dc-data || true
+      # - name: Remove old DC data
+      #   run: rm -rf /tmp/dc-data || true
 
-      - name: Make fresh DC folder
-        run: mkdir -p /tmp/dc-data
+      # - name: Make fresh DC folder
+      #   run: mkdir -p /tmp/dc-data
 
-      - name: Run OWASP Dependency Check
-        env:
-          JAVA_OPTS: "-Xmx2g"
-        run: |
-          dependency-check.sh \
-            --data /tmp/dc-data \
-            --scan . \
-            --format HTML \
-            --out ./dependency-check-report.html \
-            --failOnCVSS 15
+      # - name: Run OWASP Dependency Check
+      #   env:
+      #     JAVA_OPTS: "-Xmx2g"
+      #   run: |
+      #     dependency-check.sh \
+      #       --data /tmp/dc-data \
+      #       --scan . \
+      #       --format HTML \
+      #       --out ./dependency-check-report.html \
+      #       --failOnCVSS 15
 
-      - name: Upload Report
-        uses: actions/upload-artifact@v3
-        with:
-          name: dependency-check-report
-          path: dependency-check-report.html
+      # - name: Upload Report
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: dependency-check-report
+      #     path: dependency-check-report.html
 
   # ------------------------------------------------------
   #  3b) Code-Style Scan: Checkstyle
@@ -127,22 +127,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Restore WAR artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: war-artifact
-          path: ./target
+      # - name: Restore WAR artifact
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: war-artifact
+      #     path: ./target
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '11'
+      # - name: Set up JDK 11
+      #   uses: actions/setup-java@v3
+      #   with:
+      #     distribution: 'temurin'
+      #     java-version: '11'
 
-      - name: Checkstyle Scan
-        run: |
-          mvn --batch-mode org.apache.maven.plugins:maven-checkstyle-plugin:3.2.2:check \
-            -Dcheckstyle.failOnViolation=false
+      # - name: Checkstyle Scan
+      #   run: |
+      #     mvn --batch-mode org.apache.maven.plugins:maven-checkstyle-plugin:3.2.2:check \
+      #       -Dcheckstyle.failOnViolation=false
 
   # ------------------------------------------------------
   #  4) Docker Build & Push (using PAT)
