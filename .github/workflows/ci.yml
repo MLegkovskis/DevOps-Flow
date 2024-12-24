@@ -92,12 +92,16 @@ jobs:
           unzip dependency-check-8.3.1-release.zip -d $GITHUB_WORKSPACE/dependency-check
           echo "$GITHUB_WORKSPACE/dependency-check/dependency-check/bin" >> $GITHUB_PATH
 
+      - name: Remove old DC data
+        run: rm -rf /tmp/dc-data || true
+
+      - name: Make fresh DC folder
+        run: mkdir -p /tmp/dc-data
+
       - name: Run OWASP Dependency Check
+        env:
+          JAVA_OPTS: "-Xmx2g"
         run: |
-          # 1) Create a fresh directory in /tmp for the DC data
-          mkdir -p /tmp/dc-data
-          
-          # 2) Run DC pointing to /tmp/dc-data
           dependency-check.sh \
             --data /tmp/dc-data \
             --scan . \
