@@ -210,11 +210,11 @@ jobs:
         shell: bash
 
       # 7) Sleep for 60s so user can test the app
-      - name: Sleep to Allow Testing
+      - name: Sleep to Allow Testing, click me
         run: |
           echo "Public IP is $PUBLIC_IP. You can browse http://$PUBLIC_IP:8080"
-          echo "Sleeping 60 seconds. Explore the app now!"
-          sleep 60
+          echo "Sleeping 120 seconds. Explore the app now!"
+          sleep 120
 
       # 8) Terraform Destroy
       - name: Terraform Destroy
