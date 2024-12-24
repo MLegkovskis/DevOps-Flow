@@ -131,17 +131,14 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      # 1) Authenticate to Google Cloud
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 2) Set up Terraform
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 3) Terraform Init/Plan/Apply
       - name: Terraform Init
         run: terraform init
 
@@ -151,54 +148,55 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      # 4) Grab the public IP
       - name: Get Public IP
         id: get-ip
         run: |
           IP=$(terraform output -raw public_ip)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
-      # 5) Install gcloud CLI
+      # 1) Install gcloud
       - name: Install gcloud CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk
 
-      # 6) Generate ephemeral SSH key
+      # 2) Generate ephemeral SSH key
       - name: Generate ephemeral SSH key
         run: |
           ssh-keygen -t rsa -b 4096 -f ephemeral_key -N ""
           ls -l ephemeral_key*
 
-      # 7) Add the public key to OS Login (15m TTL)
+      # 3) Add public key to OS Login (15 min TTL)
       - name: Add SSH key to OS Login
         run: |
           gcloud compute os-login ssh-keys add \
             --key-file=ephemeral_key.pub \
             --ttl=15m
 
-      # 8) Install Ansible
+      # 4) Install Ansible
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      # 9) Create an Ansible inventory
+      # 5) Create inventory
       - name: Ansible inventory
         run: |
           echo "[ephemeral]" > inventory
           echo "$PUBLIC_IP ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_user=$(gcloud config get-value account)" >> inventory
           cat inventory
 
-      # 10) Ansible: install Docker & run container
-      - name: Run Ansible
+      # 6) Ansible tasks
+      - name: Ansible playbook
         run: |
           ansible-playbook -i inventory ansible/setup.yml \
             --private-key ephemeral_key
 
-      # 11) Sleep so we can test
+      # 7) Sleep / test
       - name: Sleep
         run: |
-          echo "App is at http://$PUBLIC_IP:8080"
-          sleep 300
+          echo "App at http://$PUBLIC_IP:8080"
+          sleep 120
 
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
