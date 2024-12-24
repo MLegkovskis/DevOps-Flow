@@ -175,11 +175,10 @@ jobs:
           docker push "marilee/devops:${{ github.sha }}"
 
   # ------------------------------------------------------
-  #  5) Deploy to ephemeral environment via Docker
-  #     using Terraform on GCP
+  #  5) Deploy GCP VM with Terraform + Ansible
   # ------------------------------------------------------
   deploy-gcp-ephemeral:
-    name: Deploy GCP Ephemeral VM
+    name: Deploy GCP + Run Docker with Ansible
     runs-on: ubuntu-latest
     needs: [docker-build-push]
 
@@ -187,7 +186,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      # 1) Authenticate to GCP using service account
+      # 1) Authenticate to GCP
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -197,37 +196,58 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 3) Replace <<TAG_REPLACE>> with the GitHub commit SHA
-      - name: Inject Docker tag
-        run: |
-          sed -i "s|<<TAG_REPLACE>>|${{ github.sha }}|g" main.tf
-
-      # 4) Terraform Init
+      # 3) Terraform Init/Plan/Apply
       - name: Terraform Init
         run: terraform init
 
-      # 5) Terraform Plan
       - name: Terraform Plan
         run: terraform plan
 
-      # 6) Terraform Apply
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      # 7) Grab the public IP from Terraform output
+      # 4) Grab the public IP
       - name: Get Public IP
         id: get-ip
         run: |
           IP=$(terraform output -raw public_ip)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
-      # 8) Sleep for 2 minutes so user can test the app
-      - name: Sleep to Allow Testing
+      # 5) Install Ansible
+      - name: Install Ansible
         run: |
-          echo "Public IP is $PUBLIC_IP"
-          echo "Browse to http://$PUBLIC_IP:8080"
-          sleep 600
+          sudo apt-get update
+          sudo apt-get install -y ansible
 
-      # 9) Terraform Destroy
+      # 6) Create Ansible inventory
+      - name: Setup Ansible Inventory
+        id: inventory
+        run: |
+          echo "[ephemeral]" > inventory
+          echo "$PUBLIC_IP ansible_user=root" >> inventory
+          echo "" >> inventory
+          cat inventory
+
+      # 7) Create the SSH key file from the secret
+      #    (You must store your private key in GH as GCP_SSH_KEY)
+      - name: Create SSH Key
+        run: |
+          echo "${{ secrets.GCP_SSH_KEY }}" > id_rsa
+          chmod 600 id_rsa
+
+      # 8) Run the Ansible playbook
+      - name: Ansible run
+        run: |
+          ansible-playbook -i inventory ansible/setup.yml \
+            --private-key id_rsa \
+            --extra-vars "docker_tag=${{ github.sha }}"
+
+      # 9) Sleep so you can test
+      - name: Sleep for 2 min
+        run: |
+          echo "Your ephemeral app should now be live at http://$PUBLIC_IP:8080"
+          sleep 120
+
+      # 10) Terraform Destroy
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
