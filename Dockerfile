@@ -1,5 +1,4 @@
 # Dockerfile
-
 FROM tomcat:9.0
 
 # Copy the WAR into Tomcat's webapps folder

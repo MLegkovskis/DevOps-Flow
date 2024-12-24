@@ -144,7 +144,6 @@ jobs:
           mvn --batch-mode org.apache.maven.plugins:maven-checkstyle-plugin:3.2.2:check \
             -Dcheckstyle.failOnViolation=false
 
-
   # ------------------------------------------------------
   #  4) Docker Build & Push (using PAT)
   # ------------------------------------------------------
@@ -175,9 +174,9 @@ jobs:
         run: |
           docker push "marilee/devops:${{ github.sha }}"
 
-
   # ------------------------------------------------------
-  #  5) Deploy to ephemeral environment via Docker + ngrok
+  #  5) Deploy to ephemeral environment via Docker
+  #     using Terraform on GCP
   # ------------------------------------------------------
   deploy-gcp-ephemeral:
     name: Deploy GCP Ephemeral VM
@@ -185,7 +184,7 @@ jobs:
     needs: [docker-build-push]
 
     steps:
-      - name: Check out code
+      - name: Checkout
         uses: actions/checkout@v3
 
       # 1) Authenticate to GCP using service account
@@ -198,33 +197,37 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 3) Terraform Init
+      # 3) Replace <<TAG_REPLACE>> with the GitHub commit SHA
+      - name: Inject Docker tag
+        run: |
+          sed -i "s|<<TAG_REPLACE>>|${{ github.sha }}|g" main.tf
+
+      # 4) Terraform Init
       - name: Terraform Init
         run: terraform init
 
-      # 4) Terraform Plan
+      # 5) Terraform Plan
       - name: Terraform Plan
         run: terraform plan
 
-      # 5) Terraform Apply
+      # 6) Terraform Apply
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      # 6) Grab the public IP from Terraform output
+      # 7) Grab the public IP from Terraform output
       - name: Get Public IP
         id: get-ip
         run: |
           IP=$(terraform output -raw public_ip)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
-        shell: bash
 
-      # 7) Sleep for 60s so user can test the app
-      - name: Sleep to Allow Testing, click me
+      # 8) Sleep for 2 minutes so user can test the app
+      - name: Sleep to Allow Testing
         run: |
-          echo "Public IP is $PUBLIC_IP. You can browse http://$PUBLIC_IP:8080"
-          echo "Sleeping 120 seconds. Explore the app now!"
+          echo "Public IP is $PUBLIC_IP"
+          echo "Browse to http://$PUBLIC_IP:8080"
           sleep 120
 
-      # 8) Terraform Destroy
+      # 9) Terraform Destroy
       - name: Terraform Destroy
         run: terraform destroy -auto-approve

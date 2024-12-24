@@ -9,60 +9,53 @@ terraform {
 }
 
 provider "google" {
-  # Use your GCP project ID here
   project = "fresh-circle-431620-r4"
-  # Region or zone references for your resources
   region  = "europe-west2"
-  # You can also set a default zone if you want
 }
 
-########################
+###################################
 # 1) VPC + Firewall
-########################
-
+###################################
 resource "google_compute_network" "vpc_demo" {
   name                    = "vpc-demo"
   auto_create_subnetworks = true
 }
 
-resource "google_compute_firewall" "allow_8080" {
-  name    = "allow-8080"
+# DEMO only: opens ALL ports from anywhere
+resource "google_compute_firewall" "demo_allow_all" {
+  name    = "demo-allow-all"
   network = google_compute_network.vpc_demo.self_link
 
   allow {
     protocol = "tcp"
-    ports    = ["8080"]
+    # All TCP ports
+    ports = ["0-65535"]
   }
 
   source_ranges = ["0.0.0.0/0"]
 }
 
-########################
+###################################
 # 2) Compute Instance
-########################
-
+###################################
 resource "google_compute_instance" "demo_vm" {
   name         = "demo-vm"
   machine_type = "e2-micro"
   zone         = "europe-west2-a"
 
-  # Boot disk with Debian
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-11"
     }
   }
 
-  # Ephemeral external IP
+  # ephemeral external IP
   network_interface {
     network = google_compute_network.vpc_demo.self_link
     access_config {}
   }
 
-  # Simple startup script that:
-  # 1) Installs Docker
-  # 2) Pulls your Docker image from Docker Hub
-  # 3) Runs it on port 8080
+  # The startup script references <<TAG_REPLACE>> or var.docker_tag
   metadata_startup_script = <<-EOF
     #!/bin/bash
     apt-get update
@@ -75,23 +68,15 @@ resource "google_compute_instance" "demo_vm" {
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io
 
-    # Pull your ephemeral image from DockerHub
-    # Notice we reference your GitHub SHA environment variable. 
-    # But since it's at runtime on the VM, let's hard-code the tag if you want
-    # or pass the tag via an environment var if you prefer. 
-    # Example uses the same tag from your pipeline
-    # If you want a static tag, e.g., "latest", modify accordingly.
+    # Example with placeholder. Will be replaced by sed or var
     docker pull marilee/devops:<<TAG_REPLACE>>
     docker run -d -p 8080:8080 --name java-app marilee/devops:<<TAG_REPLACE>>
   EOF
-
-  # We'll dynamically replace <<TAG_REPLACE>> with your GitHub SHA or "latest" 
-  # in a Terraform local or variable. We'll do a sed or local variable approach below.
 }
 
-########################
+###################################
 # 3) Output the IP
-########################
+###################################
 output "public_ip" {
   description = "The public IP of the ephemeral VM"
   value       = google_compute_instance.demo_vm.network_interface[0].access_config[0].nat_ip
