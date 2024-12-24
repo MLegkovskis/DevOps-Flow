@@ -17,10 +17,14 @@
     - name: Add Docker GPG key
       command: |
         curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+      args:
+        warn: false
 
     - name: Add Docker repo
       command: |
         echo "deb [arch=amd64] https://download.docker.com/linux/debian buster stable" >> /etc/apt/sources.list
+      args:
+        warn: false
 
     - name: apt-get update
       apt:

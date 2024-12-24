@@ -8,7 +8,7 @@ on:
 
 jobs:
   # ------------------------------------------------------
-  #  1) Build & Test
+  # 1) Build & Test
   # ------------------------------------------------------
   build-test:
     name: Build & Test
@@ -37,7 +37,7 @@ jobs:
 
 
   # ------------------------------------------------------
-  #  2) Build the WAR file
+  # 2) Build the WAR file
   # ------------------------------------------------------
   build-war:
     name: Build WAR
@@ -63,8 +63,9 @@ jobs:
           name: war-artifact
           path: target/hello-1.0.war
 
+
   # ------------------------------------------------------
-  #  3a) Security Scan: OWASP Dependency Check
+  # 3a) Security Scan: OWASP Dependency Check (commented out)
   # ------------------------------------------------------
   owasp-dependency-check:
     runs-on: ubuntu-latest
@@ -72,80 +73,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      # - name: Download WAR artifact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: war-artifact
-      #     path: ./target
-
-      # - name: Set up JDK 11
-      #   uses: actions/setup-java@v3
-      #   with:
-      #     distribution: 'temurin'
-      #     java-version: '11'
-
-      # - name: Install OWASP Dependency Check (local folder)
-      #   run: |
-      #     mkdir -p $GITHUB_WORKSPACE/dependency-check
-      #     wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.3.1/dependency-check-8.3.1-release.zip
-      #     unzip dependency-check-8.3.1-release.zip -d $GITHUB_WORKSPACE/dependency-check
-      #     echo "$GITHUB_WORKSPACE/dependency-check/dependency-check/bin" >> $GITHUB_PATH
-
-      # - name: Remove old DC data
-      #   run: rm -rf /tmp/dc-data || true
-
-      # - name: Make fresh DC folder
-      #   run: mkdir -p /tmp/dc-data
-
-      # - name: Run OWASP Dependency Check
-      #   env:
-      #     JAVA_OPTS: "-Xmx2g"
-      #   run: |
-      #     dependency-check.sh \
-      #       --data /tmp/dc-data \
-      #       --scan . \
-      #       --format HTML \
-      #       --out ./dependency-check-report.html \
-      #       --failOnCVSS 15
-
-      # - name: Upload Report
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #     name: dependency-check-report
-      #     path: dependency-check-report.html
+      # (commented out steps)
+      # ...
+      # (end of commented out steps)
 
   # ------------------------------------------------------
-  #  3b) Code-Style Scan: Checkstyle
+  # 3b) Code-Style Scan: Checkstyle (commented out)
   # ------------------------------------------------------
   checkstyle:
     name: Checkstyle
     runs-on: ubuntu-latest
     needs: [build-war]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      # - name: Restore WAR artifact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: war-artifact
-      #     path: ./target
-
-      # - name: Set up JDK 11
-      #   uses: actions/setup-java@v3
-      #   with:
-      #     distribution: 'temurin'
-      #     java-version: '11'
-
-      # - name: Checkstyle Scan
-      #   run: |
-      #     mvn --batch-mode org.apache.maven.plugins:maven-checkstyle-plugin:3.2.2:check \
-      #       -Dcheckstyle.failOnViolation=false
+      # (commented out steps)
+      # ...
+      # (end of commented out steps)
 
   # ------------------------------------------------------
-  #  4) Docker Build & Push (using PAT)
+  # 4) Docker Build & Push (using PAT)
   # ------------------------------------------------------
   docker-build-push:
     name: Docker Build & Push
@@ -175,7 +122,7 @@ jobs:
           docker push "marilee/devops:${{ github.sha }}"
 
   # ------------------------------------------------------
-  #  5) Deploy GCP VM with Terraform + Ansible
+  # 5) Deploy GCP VM with Terraform + Ansible
   # ------------------------------------------------------
   deploy-gcp-ephemeral:
     runs-on: ubuntu-latest
@@ -184,14 +131,17 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      # 1) Authenticate to Google Cloud
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # 2) Set up Terraform
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # 3) Terraform Init/Plan/Apply
       - name: Terraform Init
         run: terraform init
 
@@ -201,55 +151,54 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
+      # 4) Grab the public IP
       - name: Get Public IP
         id: get-ip
         run: |
           IP=$(terraform output -raw public_ip)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
-      # 1) Install gcloud if not already (some images have it)
+      # 5) Install gcloud CLI
       - name: Install gcloud CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk
 
-      # 2) Generate ephemeral SSH key
+      # 6) Generate ephemeral SSH key
       - name: Generate ephemeral SSH key
         run: |
           ssh-keygen -t rsa -b 4096 -f ephemeral_key -N ""
           ls -l ephemeral_key*
 
-      # 3) Add public key to OS Login (15-minute TTL)
+      # 7) Add the public key to OS Login (15m TTL)
       - name: Add SSH key to OS Login
         run: |
           gcloud compute os-login ssh-keys add \
             --key-file=ephemeral_key.pub \
             --ttl=15m
 
-      # 4) Install Ansible
+      # 8) Install Ansible
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      # 5) Create an Ansible inventory
+      # 9) Create an Ansible inventory
       - name: Ansible inventory
         run: |
           echo "[ephemeral]" > inventory
           echo "$PUBLIC_IP ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_user=$(gcloud config get-value account)" >> inventory
           cat inventory
 
-      # 6) Ansible playbook - install Docker, run container
+      # 10) Ansible: install Docker & run container
       - name: Run Ansible
         run: |
           ansible-playbook -i inventory ansible/setup.yml \
             --private-key ephemeral_key
 
-      # 7) Sleep 60s
+      # 11) Sleep so we can test
       - name: Sleep
         run: |
           echo "App is at http://$PUBLIC_IP:8080"
           sleep 300
 
-      - name: Terraform Destroy
-        run: terraform destroy -auto-approve
