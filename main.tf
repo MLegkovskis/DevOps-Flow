@@ -1,3 +1,6 @@
+##################################################
+# main.tf
+##################################################
 terraform {
   required_version = ">= 1.0.0"
   required_providers {
@@ -13,7 +16,7 @@ provider "google" {
   region  = "europe-west2"
 }
 
-# VPC + firewall opens all TCP ports for demo
+# VPC & Firewall
 resource "google_compute_network" "vpc_demo" {
   name                    = "vpc-demo"
   auto_create_subnetworks = true
@@ -42,21 +45,19 @@ resource "google_compute_instance" "demo_vm" {
     }
   }
 
-  # ephemeral external IP
   network_interface {
     network = google_compute_network.vpc_demo.self_link
     access_config {}
   }
 
-  # OS Login enabled - no local metadata SSH keys
   metadata = {
     enable-oslogin = "TRUE"
   }
 
-  # (Optional) attach a service account that has osLogin roles or just your user logs in with your personal account
+  # Hardcode the SA email
   service_account {
-    email  = var.service_account_email
-    scopes = ["cloud-platform"] 
+    email  = "demo-cv@fresh-circle-431620-r4.iam.gserviceaccount.com"
+    scopes = ["cloud-platform"]
   }
 }
 
