@@ -44,6 +44,7 @@ resource "google_compute_firewall" "allow_8080" {
 resource "google_compute_instance" "demo_vm" {
   name         = "demo-vm"
   machine_type = "e2-micro"
+  zone         = "europe-west2-a"
 
   # Boot disk with Debian
   boot_disk {
