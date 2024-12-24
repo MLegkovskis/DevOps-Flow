@@ -1,14 +1,10 @@
 # ansible/setup.yml
 ---
-- name: Configure GCP VM and run Docker container
+- name: Configure ephemeral GCP VM
   hosts: ephemeral
-  become: yes  # We'll use sudo
+  become: yes
   tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-
-    - name: Install required packages
+    - name: Install base packages
       apt:
         name:
           - apt-transport-https
@@ -19,18 +15,14 @@
         update_cache: yes
 
     - name: Add Docker GPG key
-      ansible.builtin.command: |
+      command: |
         curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
-      args:
-        warn: false
 
     - name: Add Docker repo
-      ansible.builtin.command: |
+      command: |
         echo "deb [arch=amd64] https://download.docker.com/linux/debian buster stable" >> /etc/apt/sources.list
-      args:
-        warn: false
 
-    - name: Update apt cache again
+    - name: apt-get update
       apt:
         update_cache: yes
 
@@ -42,21 +34,11 @@
           - containerd.io
         state: present
 
-    - name: Pull container image
-      ansible.builtin.command: >
-        docker pull marilee/devops:{{ docker_tag }}
+    - name: Pull Docker image
+      command: docker pull marilee/devops:{{ lookup('env','GITHUB_SHA') }}
 
-    - name: Run container on port 8080
-      ansible.builtin.command: >
-        docker run -d -p 8080:8080 --name java-app marilee/devops:{{ docker_tag }}
+    - name: Run container
+      command: docker run -d -p 8080:8080 --name java-app marilee/devops:{{ lookup('env','GITHUB_SHA') }}
 
-    - name: Check docker ps
-      ansible.builtin.command: docker ps
-
-    - name: (Optional) Show logs
-      ansible.builtin.command: docker logs java-app
-      register: container_logs
-
-    - name: Debug logs
-      debug:
-        var: container_logs.stdout
+    - name: Show Docker ps
+      command: docker ps

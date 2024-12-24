@@ -178,25 +178,20 @@ jobs:
   #  5) Deploy GCP VM with Terraform + Ansible
   # ------------------------------------------------------
   deploy-gcp-ephemeral:
-    name: Deploy GCP + Run Docker with Ansible
     runs-on: ubuntu-latest
     needs: [docker-build-push]
-
     steps:
-      - name: Checkout
+      - name: Check out code
         uses: actions/checkout@v3
 
-      # 1) Authenticate to GCP
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 2) Set up Terraform
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 3) Terraform Init/Plan/Apply
       - name: Terraform Init
         run: terraform init
 
@@ -206,48 +201,55 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      # 4) Grab the public IP
       - name: Get Public IP
         id: get-ip
         run: |
           IP=$(terraform output -raw public_ip)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
-      # 5) Install Ansible
+      # 1) Install gcloud if not already (some images have it)
+      - name: Install gcloud CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-sdk
+
+      # 2) Generate ephemeral SSH key
+      - name: Generate ephemeral SSH key
+        run: |
+          ssh-keygen -t rsa -b 4096 -f ephemeral_key -N ""
+          ls -l ephemeral_key*
+
+      # 3) Add public key to OS Login (15-minute TTL)
+      - name: Add SSH key to OS Login
+        run: |
+          gcloud compute os-login ssh-keys add \
+            --key-file=ephemeral_key.pub \
+            --ttl=15m
+
+      # 4) Install Ansible
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      # 6) Create Ansible inventory
-      - name: Setup Ansible Inventory
-        id: inventory
+      # 5) Create an Ansible inventory
+      - name: Ansible inventory
         run: |
           echo "[ephemeral]" > inventory
-          echo "$PUBLIC_IP ansible_user=root" >> inventory
-          echo "" >> inventory
+          echo "$PUBLIC_IP ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_user=$(gcloud config get-value account)" >> inventory
           cat inventory
 
-      # 7) Create the SSH key file from the secret
-      #    (You must store your private key in GH as GCP_SSH_KEY)
-      - name: Create SSH Key
-        run: |
-          echo "${{ secrets.GCP_SSH_KEY }}" > id_rsa
-          chmod 600 id_rsa
-
-      # 8) Run the Ansible playbook
-      - name: Ansible run
+      # 6) Ansible playbook - install Docker, run container
+      - name: Run Ansible
         run: |
           ansible-playbook -i inventory ansible/setup.yml \
-            --private-key id_rsa \
-            --extra-vars "docker_tag=${{ github.sha }}"
+            --private-key ephemeral_key
 
-      # 9) Sleep so you can test
-      - name: Sleep for 2 min
+      # 7) Sleep 60s
+      - name: Sleep
         run: |
-          echo "Your ephemeral app should now be live at http://$PUBLIC_IP:8080"
-          sleep 120
+          echo "App is at http://$PUBLIC_IP:8080"
+          sleep 300
 
-      # 10) Terraform Destroy
       - name: Terraform Destroy
         run: terraform destroy -auto-approve

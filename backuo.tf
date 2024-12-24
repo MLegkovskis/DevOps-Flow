@@ -13,7 +13,9 @@ provider "google" {
   region  = "europe-west2"
 }
 
-# VPC + firewall opens all TCP ports for demo
+###################################
+# VPC + Firewall (all ports open)
+###################################
 resource "google_compute_network" "vpc_demo" {
   name                    = "vpc-demo"
   auto_create_subnetworks = true
@@ -31,11 +33,15 @@ resource "google_compute_firewall" "demo_allow_all" {
   source_ranges = ["0.0.0.0/0"]
 }
 
+###################################
+# Compute Instance (no startup script)
+###################################
 resource "google_compute_instance" "demo_vm" {
   name         = "demo-vm"
   machine_type = "e2-micro"
   zone         = "europe-west2-a"
 
+  # Boot disk with Debian
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-11"
@@ -48,18 +54,17 @@ resource "google_compute_instance" "demo_vm" {
     access_config {}
   }
 
-  # OS Login enabled - no local metadata SSH keys
+  # Insert your SSH public key so you can SSH in via Ansible
+  # This is one approach: use instance metadata "ssh-keys" to embed your key
+  # Format is: "USERNAME:SSH_PUBLIC_KEY"
   metadata = {
-    enable-oslogin = "TRUE"
-  }
-
-  # (Optional) attach a service account that has osLogin roles or just your user logs in with your personal account
-  service_account {
-    email  = var.service_account_email
-    scopes = ["cloud-platform"] 
+    ssh-keys = "root:${file("./id_rsa.pub")}"
   }
 }
 
+###################################
+# Output the public IP
+###################################
 output "public_ip" {
   description = "The public IP of the ephemeral VM"
   value       = google_compute_instance.demo_vm.network_interface[0].access_config[0].nat_ip
