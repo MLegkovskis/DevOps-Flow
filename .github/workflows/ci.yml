@@ -63,7 +63,6 @@ jobs:
           name: war-artifact
           path: target/hello-1.0.war
 
-
   # ------------------------------------------------------
   #  3a) Security Scan: OWASP Dependency Check
   # ------------------------------------------------------
@@ -95,7 +94,13 @@ jobs:
 
       - name: Run OWASP Dependency Check
         run: |
-          dependency-check.sh --scan . \
+          # 1) Create a fresh directory in /tmp for the DC data
+          mkdir -p /tmp/dc-data
+          
+          # 2) Run DC pointing to /tmp/dc-data
+          dependency-check.sh \
+            --data /tmp/dc-data \
+            --scan . \
             --format HTML \
             --out ./dependency-check-report.html \
             --failOnCVSS 15
