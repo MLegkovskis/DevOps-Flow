@@ -226,7 +226,7 @@ jobs:
         run: |
           echo "Public IP is $PUBLIC_IP"
           echo "Browse to http://$PUBLIC_IP:8080"
-          sleep 120
+          sleep 600
 
       # 9) Terraform Destroy
       - name: Terraform Destroy
